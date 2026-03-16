@@ -7,6 +7,25 @@ export const ErrorSchema = z.object({
   code: z.string(),
 });
 
+export const RegisterBodySchema = z.object({
+  name: z.string().trim().min(1),
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+export const LoginBodySchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+export const AuthUserSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+});
+
 export const StartWorkoutSessionSchema = z.object({
   userWorkoutSessionId: z.uuid(),
 });

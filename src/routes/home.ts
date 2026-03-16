@@ -1,10 +1,9 @@
-import { fromNodeHeaders } from "better-auth/node";
-import { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import z from "zod";
 
 import { NotFoundError } from "../errors/index.js";
-import { auth } from "../lib/auth.js";
+import { getSessionFromRequest } from "../lib/session.js";
 import { ErrorSchema, HomeDataSchema } from "../schemas/index.js";
 import { GetHomeData } from "../usecases/GetHomeData.js";
 
@@ -27,9 +26,7 @@ export const homeRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
-        });
+        const session = await getSessionFromRequest(request);
         if (!session) {
           return reply.status(401).send({
             error: "Unauthorized",

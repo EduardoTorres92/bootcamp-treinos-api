@@ -1,3 +1,5 @@
+import { Readable } from "node:stream";
+
 import { openai } from "@ai-sdk/openai";
 import {
   convertToModelMessages,
@@ -6,13 +8,12 @@ import {
   tool,
   UIMessage,
 } from "ai";
-import { fromNodeHeaders } from "better-auth/node";
-import { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import z from "zod";
 
 import { WeekDay } from "../generated/prisma/enums.js";
-import { auth } from "../lib/auth.js";
+import { getSessionFromRequest } from "../lib/session.js";
 import { CreateWorkoutPlan } from "../usecases/CreateWorkoutPlan.js";
 import { GetUserTrainData } from "../usecases/GetUserTrainData.js";
 import { ListWorkoutPlans } from "../usecases/ListWorkoutPlans.js";
@@ -83,18 +84,27 @@ export const aiRoutes = async (app: FastifyInstance) => {
       summary: "Chat with AI personal trainer",
     },
     handler: async (request, reply) => {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(request.headers),
-      });
+      try {
+        app.log.info("POST /ai received");
+        const session = await getSessionFromRequest(request);
 
-      if (!session) {
-        return reply.status(401).send({ error: "Unauthorized" });
-      }
+        if (!session) {
+          app.log.warn("POST /ai: no session");
+          return reply.status(401).send({ error: "Unauthorized" });
+        }
 
-      const userId = session.user.id;
-      const { messages } = request.body as { messages: UIMessage[] };
+        const userId = session.user.id;
+        const body = request.body as { messages?: UIMessage[] };
+        const messages = body?.messages ?? [];
 
-      const result = streamText({
+        if (!Array.isArray(messages) || messages.length === 0) {
+          return reply.status(400).send({
+            error: "Body must include messages array",
+          });
+        }
+
+        app.log.info("POST /ai: calling OpenAI");
+        const result = streamText({
         model: openai("gpt-4o-mini"),
         system: SYSTEM_PROMPT,
         messages: await convertToModelMessages(messages),
@@ -206,10 +216,21 @@ export const aiRoutes = async (app: FastifyInstance) => {
         },
       });
 
-      const response = result.toUIMessageStreamResponse();
-      reply.status(response.status);
-      response.headers.forEach((value, key) => reply.header(key, value));
-      return reply.send(response.body);
+        const response = result.toUIMessageStreamResponse();
+        reply.status(response.status);
+        response.headers.forEach((value, key) => reply.header(key, value));
+        // Fastify precisa de Node Readable; Response.body é Web ReadableStream
+        const nodeStream = Readable.fromWeb(
+          response.body as ReadableStream<Uint8Array>
+        );
+        return reply.send(nodeStream);
+      } catch (err) {
+        app.log.error(err);
+        return reply.status(500).send({
+          error:
+            err instanceof Error ? err.message : "Internal server error",
+        });
+      }
     },
   });
 };

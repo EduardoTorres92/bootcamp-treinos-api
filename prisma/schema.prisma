@@ -20,6 +20,7 @@ model User {
   email               String
   emailVerified       Boolean       @default(false)
   image               String?
+  passwordHash        String?       // senha hash para login por email/senha
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   sessions            Session[]
