@@ -1,3 +1,6 @@
 node_modules
 /src/generated/prisma
 .env
+# cache de ferramentas
+.serena/
+dist/
